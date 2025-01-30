@@ -54,11 +54,14 @@ jobs:
           if [ ! -f "CHANGELOG.md" ]; then
             echo "📝 CHANGELOG.md not found. Generating for the first time..."
             conventional-changelog -p angular -i CHANGELOG.md -s -r 1 --commit-path .
+            echo "✅ CHANGELOG.md generated."
           else
-            if git diff --name-only origin/production...HEAD | grep -q "CHANGELOG.md"; then
-              echo "✅ Changelog updated"
+            conventional-changelog -p angular -i CHANGELOG.md -s -r 1 --commit-path .
+
+            if git diff --name-only CHANGELOG.md | grep -q "CHANGELOG.md"; then
+              echo "✅ Changelog updated."
             else
-              echo "❌ ERROR: Changelog not updated. Please update CHANGELOG.md"
+              echo "❌ ERROR: Changelog not updated. Please update CHANGELOG.md."
               exit 1
             fi
           fi
