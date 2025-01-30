@@ -38,6 +38,9 @@ jobs:
     runs-on: ubuntu-22.04
     needs: validate-pr-title
     steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
       - name: Install GitHub CLI
         run: sudo apt update && sudo apt install -y gh
 
