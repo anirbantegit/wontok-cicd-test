@@ -21,10 +21,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-22.04
-    steps:
-      - name: Run Tests
-        uses: ./.github/workflows/test.yml
+    uses: ./.github/workflows/test.yml
 
   deploy:
     runs-on: ubuntu-22.04
