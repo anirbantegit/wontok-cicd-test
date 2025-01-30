@@ -51,19 +51,25 @@ jobs:
 
       - name: Ensure Changelog Updated
         run: |
+          # Regenerate changelog and verify if it is updated
+          conventional-changelog -p angular -i CHANGELOG.md -s -r 1 --commit-path .
+
           if [ ! -f "CHANGELOG.md" ]; then
             echo "📝 CHANGELOG.md not found. Generating for the first time..."
-            conventional-changelog -p angular -i CHANGELOG.md -s -r 1 --commit-path .
-            echo "✅ CHANGELOG.md generated."
-          else
-            conventional-changelog -p angular -i CHANGELOG.md -s -r 1 --commit-path .
 
-            if git diff --name-only CHANGELOG.md | grep -q "CHANGELOG.md"; then
-              echo "✅ Changelog updated."
+            if [ -f "CHANGELOG.md" ]; then
+              echo "✅ CHANGELOG.md successfully generated."
             else
-              echo "❌ ERROR: Changelog not updated. Please update CHANGELOG.md."
+              echo "❌ ERROR: CHANGELOG.md was not created."
               exit 1
             fi
+          fi
+
+          if git status --porcelain | grep -q "CHANGELOG.md"; then
+            echo "✅ Changelog updated."
+          else
+            echo "❌ ERROR: Changelog not updated. Please update CHANGELOG.md."
+            exit 1
           fi
 
       - name: Push Changelog Updates
