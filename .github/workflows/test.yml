@@ -37,7 +37,16 @@ jobs:
             cp .env.testing .env
             echo "✅ .env.testing copied to .env"
           else
-            echo "⚠ .env.testing not found. Skipping environment setup."
+            echo "⚠ .env.testing not found. Creating default .env file."
+            cp .env.example .env || touch .env
+          fi
+
+          if ! grep -q "^APP_KEY=" .env; then
+            echo "🔑 Generating application key..."
+            php artisan key:generate --ansi
+            echo "✅ Application key generated."
+          else
+            echo "🔑 APP_KEY already exists."
           fi
 
       - name: Run Database Migrations
