@@ -1,0 +1,9 @@
+name: Run Tests
+description: Runs PHPUnit and JavaScript tests
+
+runs:
+  using: "composite"
+  steps:
+    - name: Run PHP Tests
+      run: php artisan test
+      shell: bash

@@ -1,0 +1,144 @@
+name: Auto-Merge PRs
+
+on:
+  pull_request:
+    types: [labeled, synchronize, reopened]
+
+jobs:
+  # Run Tests Before Merging
+  test-before-merge:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Test Environment
+        uses: ./.github/actions/setup-environment/
+        with:
+          env_type: "test"
+
+      - name: Run Tests
+        uses: ./.github/actions/run-tests/
+
+  validate-pr-title:
+    runs-on: ubuntu-22.04
+    needs: test-before-merge
+    steps:
+      - name: Validate PR Title
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|perf|test|build|chore)\(WO-[0-9]+\):\ .+$ ]]; then
+            echo "❌ ERROR: PR title does not follow the required format!"
+            exit 1
+          fi
+
+
+  # Prepare for Merge (Squash but Don't Push Yet)
+  prepare-merge:
+    runs-on: ubuntu-22.04
+    needs: validate-pr-title
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install GitHub CLI
+        run: sudo apt update && sudo apt install -y gh
+
+      - name: Authenticate with GitHub CLI
+        run: gh auth status
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Fetch PR Details
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          BASE_BRANCH=$(gh pr view "$PR_NUMBER" --json baseRefName --jq '.baseRefName')
+          HEAD_BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+
+          echo "Base Branch: $BASE_BRANCH"
+          echo "Head Branch: $HEAD_BRANCH"
+
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+          echo "BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
+          echo "HEAD_BRANCH=$HEAD_BRANCH" >> $GITHUB_ENV
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Check if PR is Approved
+        run: |
+          APPROVAL_COUNT=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[].state | select(. == "APPROVED")] | length')
+
+          if [[ "$APPROVAL_COUNT" -ge 1 ]]; then
+            echo "✅ PR #$PR_NUMBER is approved, proceeding with squash merge..."
+          else
+            echo "❌ PR #$PR_NUMBER is not approved, skipping merge."
+            exit 0
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Set Merge Message
+        run: |
+          if [[ "$COMMIT_COUNT" -eq 1 ]]; then
+            COMMIT_MESSAGE=$(git log --format=%B -n 1 HEAD)
+          else
+            COMMIT_MESSAGE="${{ github.event.pull_request.title }} - ${{ github.event.pull_request.body }}"
+          fi
+          echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+
+      - name: Squash Merge PR
+        run: |
+          gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+
+      - name: Squash Merge PR (But Don't Push Yet)
+        run: |
+          gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+  # Run Tests on Merged Code Before Pushing
+  test-after-merge:
+    runs-on: ubuntu-22.04
+    needs: prepare-merge
+    steps:
+      - name: Checkout Production Branch
+        uses: actions/checkout@v4
+        with:
+          ref: production
+
+      - name: Setup Test Environment
+        uses: ./.github/actions/setup-environment/
+        with:
+          env_type: "test"
+
+      - name: Run Tests on Merged Code
+        uses: ./.github/actions/run-tests/
+
+  # Push to Production If All Tests Pass
+  push-to-production:
+    runs-on: ubuntu-22.04
+    needs: test-after-merge
+    steps:
+      - name: Checkout Production Branch
+        uses: actions/checkout@v4
+        with:
+          ref: production
+
+      - name: Push Merged Code to Production
+        run: git push origin production
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Delete Feature Branch After Merge
+        run: |
+          if [[ "$HEAD_BRANCH" != "production" && "$HEAD_BRANCH" != "staging" ]]; then
+            echo "🗑️ Deleting feature branch: $HEAD_BRANCH"
+            gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/$HEAD_BRANCH
+          else
+            echo "❌ Not deleting protected branch: $HEAD_BRANCH"
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

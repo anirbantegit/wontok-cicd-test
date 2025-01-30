@@ -1,0 +1,9 @@
+name: Deploy Laravel
+description: Runs database migrations and caches events
+
+runs:
+  using: "composite"
+  steps:
+    - name: Fake Deploy for Testing
+      run: echo "Deploying application..."
+      shell: bash

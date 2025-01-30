@@ -10,8 +10,7 @@ class UserStudentTest extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_user_creation()
-    {
+    public function test_user_creation(){
         User::factory()->count(5)->create();
         $this->assertDatabaseCount('users', 5);
     }

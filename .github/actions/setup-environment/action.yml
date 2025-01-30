@@ -1,0 +1,79 @@
+name: Setup Environment
+description: Sets up Node, PHP, and installs dependencies
+
+inputs:
+  node_version:
+    description: "Node.js version"
+    required: true
+    default: "20"
+  php_version:
+    description: "PHP version"
+    required: true
+    default: "8.3"
+  env_type:
+    description: "Environment type (test, prod)"
+    required: false
+    default: "prod"
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node_version }}
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ inputs.php_version }}
+        tools: composer:v2
+        coverage: none
+
+    # Cache Composer Dependencies
+    - name: Cache Composer Dependencies
+      uses: actions/cache@v3
+      with:
+        path: ~/.composer/cache
+        key: ${{ runner.os }}-composer-${{ inputs.env_type }}-${{ hashFiles('composer.json', 'composer.lock') }}
+        restore-keys: |
+          ${{ runner.os }}-composer-${{ inputs.env_type }}-
+
+    - name: Install Composer Dependencies
+      run: |
+        if [[ "${{ inputs.env_type }}" == "prod" ]]; then
+          composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+        else
+          composer install --no-interaction --prefer-dist --optimize-autoloader
+        fi
+      shell: bash
+
+    # Cache Node Modules
+    - name: Cache Node Modules
+      uses: actions/cache@v3
+      with:
+        path: ~/.npm
+        key: ${{ runner.os }}-node-${{ inputs.env_type }}-${{ hashFiles('package.json', 'package-lock.json') }}
+        restore-keys: |
+          ${{ runner.os }}-node-${{ inputs.env_type }}-
+
+
+    # Install Node Dependencies
+    - name: Install Node Dependencies
+      run: |
+        if [[ "${{ inputs.env_type }}" == "prod" ]]; then
+          npm ci --production
+        else
+          npm ci
+        fi
+      shell: bash
+
+    # Run Migrations
+    - name: Run Database Migrations
+      run: php artisan migrate --force
+      shell: bash
+
+    # Cache Events
+    - name: Discover and Cache Events
+      run: php artisan event:cache
+      shell: bash
