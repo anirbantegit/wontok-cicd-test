@@ -77,9 +77,6 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
-
-
-
       - name: Set Merge Message
         run: |
           if [[ "$COMMIT_COUNT" -eq 1 ]]; then
@@ -89,13 +86,11 @@ jobs:
           fi
           echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
 
-          - name: Squash Merge PR
-            run: |
-              gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
-            env:
-              GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-
+      - name: Squash Merge PR
+        run: |
+          gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
       - name: Squash Merge PR (But Don't Push Yet)
