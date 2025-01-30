@@ -73,12 +73,26 @@ jobs:
   auto-merge:
     runs-on: ubuntu-22.04
     needs: deploy
+    if: github.event_name == 'pull_request'  # Run only when a PR is closed, not on push
     steps:
-      - name: Enable Auto-Merge for Approved PRs
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Enable Auto-Merge for Approved PRs (Only Passed Checks)
         run: |
           PR_NUMBER=$(gh pr list --base production --state open --json number --jq '.[].number')
-          if [[ -n "$PR_NUMBER" ]]; then    # Improved check to avoid empty merge attempts
-            gh pr merge "$PR_NUMBER" --squash --auto
+
+          if [[ -n "$PR_NUMBER" ]]; then
+            for pr in $PR_NUMBER; do
+              PR_STATUS=$(gh pr view "$pr" --json reviewDecision --jq '.reviewDecision')
+
+              if [[ "$PR_STATUS" == "APPROVED" ]]; then
+                echo "✅ PR #$pr has passed all required checks and is approved. Merging..."
+                gh pr merge "$pr" --squash --auto
+              else
+                echo "❌ PR #$pr has not passed all checks or is not approved. Skipping merge."
+              fi
+            done
           else
             echo "No PRs to merge."
           fi
