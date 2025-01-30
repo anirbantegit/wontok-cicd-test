@@ -1,0 +1,22 @@
+name: Auto-Merge PRs
+
+on:
+  workflow_run:
+    workflows: [ "Deploy to Production" ]
+    types:
+      - completed
+
+jobs:
+  auto-merge:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Auto-Merge PRs
+        run: |
+          PR_NUMBER=$(gh pr list --base ${{ github.ref_name }} --state open --json number --jq '.[].number')
+          if [[ -n "$PR_NUMBER" ]]; then
+            gh pr merge "$PR_NUMBER" --squash --auto
+          else
+            echo "No PRs to merge."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

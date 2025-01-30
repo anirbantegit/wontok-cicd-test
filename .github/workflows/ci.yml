@@ -1,19 +1,30 @@
-name: Validate PR Title
+name: Continuous Integration
 
 on:
   pull_request:
-    types: [opened, reopened, edited]
+    branches:
+      - production
 
 jobs:
   validate-pr-title:
     runs-on: ubuntu-22.04
     steps:
-      - name: Check PR Title Format
+      - name: Validate PR Title
         run: |
           PR_TITLE="${{ github.event.pull_request.title }}"
           if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|perf|test|build|chore)\(WO-[0-9]+\):\ .+$ ]]; then
             echo "❌ ERROR: PR title does not follow the required format!"
-            echo "Required Format: <type>(WO-XXXX): <subject>"
-            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, chore"
             exit 1
           fi
+
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Environment
+        uses: ./.github/actions/setup-environment/
+
+      - name: Run Tests
+        uses: ./.github/actions/run-tests/

@@ -1,0 +1,35 @@
+name: Setup Environment
+description: Sets up Node, PHP, and installs dependencies
+
+inputs:
+  node_version:
+    description: 'Node.js version'
+    required: true
+    default: '20'
+  php_version:
+    description: 'PHP version'
+    required: true
+    default: '8.3'
+
+runs:
+  using: "composite"
+  steps:
+    - name: Setup Node
+      uses: actions/setup-node@v4
+      with:
+        node-version: ${{ inputs.node_version }}
+
+    - name: Setup PHP
+      uses: shivammathur/setup-php@v2
+      with:
+        php-version: ${{ inputs.php_version }}
+        tools: composer:v2
+        coverage: none
+
+    - name: Install PHP Dependencies
+      run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+      shell: bash
+
+    - name: Install Node Dependencies
+      run: npm ci --production
+      shell: bash
