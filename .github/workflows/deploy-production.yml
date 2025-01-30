@@ -12,8 +12,18 @@ jobs:
       - name: Checkout Code
         uses: actions/checkout@v4
 
-      - name: Setup Environment
+      - name: Setup Test Environment
         uses: ./.github/actions/setup-environment/
+        with:
+          env_type: "test"
+
+      - name: Performing unit tests
+        uses: ./.github/actions/run-tests/
+
+      - name: Setup Production Environment
+        uses: ./.github/actions/setup-environment/
+        with:
+          env_type: "prod"
 
       - name: Deploy Laravel App
         uses: ./.github/actions/deploy-laravel/

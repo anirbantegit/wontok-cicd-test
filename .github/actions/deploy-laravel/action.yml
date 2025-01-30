@@ -4,14 +4,6 @@ description: Runs database migrations and caches events
 runs:
   using: "composite"
   steps:
-    - name: Run Database Migrations
-      run: php artisan migrate --force
-      shell: bash
-
-    - name: Cache Events
-      run: php artisan event:cache
-      shell: bash
-
-    - name: Deploy Application
+    - name: Fake Deploy for Testing
       run: echo "Deploying application..."
       shell: bash
