@@ -1,0 +1,89 @@
+name: Deploy
+
+on:
+  workflow_run:
+    workflows: [ "Generate Changelog" ]
+    types:
+      - completed
+    branches:
+      - production
+
+  pull_request:
+    types: [ closed ]
+    branches:
+      - production
+
+  push:
+    branches:
+      - production
+    paths-ignore:
+      - "CHANGELOG.md"
+
+jobs:
+  test:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Run Tests
+        uses: ./.github/workflows/test.yml
+
+  deploy:
+    runs-on: ubuntu-22.04
+    needs: test
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+
+      - name: Cache Composer Dependencies
+        uses: actions/cache@v3
+        with:
+          path: ~/.composer/cache
+          key: ${{ runner.os }}-composer-${{ hashFiles('**/composer.lock') }}
+          restore-keys: |
+            ${{ runner.os }}-composer-
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: 8.3
+          tools: composer:v2
+          coverage: none
+
+      - name: Install Project Dependencies (without dev deps)
+        run: composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
+
+      - name: Perform Database migrations
+        run: php artisan migrate
+
+      - name: Cache Node Modules
+        uses: actions/cache@v3
+        with:
+          path: ~/.npm
+          key: ${{ runner.os }}-node-${{ hashFiles('**/package-lock.json') }}
+          restore-keys: |
+            ${{ runner.os }}-node-
+
+      - name: Discover and cache the application's events and listeners
+        run: php artisan event:cache
+
+      - name: Fake Deploy for Testing
+        run: echo "Simulating deployment for testing purposes."
+
+  auto-merge:
+    runs-on: ubuntu-22.04
+    needs: deploy
+    steps:
+      - name: Enable Auto-Merge for Approved PRs
+        run: |
+          PR_NUMBER=$(gh pr list --base production --state open --json number --jq '.[].number')
+          if [[ -n "$PR_NUMBER" ]]; then    # Improved check to avoid empty merge attempts
+            gh pr merge "$PR_NUMBER" --squash --auto
+          else
+            echo "No PRs to merge."
+          fi
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

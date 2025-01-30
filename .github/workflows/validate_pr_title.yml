@@ -1,0 +1,19 @@
+name: Validate PR Title
+
+on:
+  pull_request:
+    types: [opened, reopened, edited]
+
+jobs:
+  validate-pr-title:
+    runs-on: ubuntu-22.04
+    steps:
+      - name: Check PR Title Format
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|perf|test|build|chore)\(WO-[0-9]+\):\ .+$ ]]; then
+            echo "❌ ERROR: PR title does not follow the required format!"
+            echo "Required Format: <type>(WO-XXXX): <subject>"
+            echo "Allowed types: feat, fix, docs, style, refactor, perf, test, build, chore"
+            exit 1
+          fi
