@@ -1,0 +1,18 @@
+#  (2025-01-30)
+
+
+### Bug Fixes
+
+* **WO-45:** generate_changelog.yml ([9a046f5](https://github.com/anirbantegit/wontok-cicd-test/commit/9a046f500e8eb77520daa470a3844a4f9a6e5f48))
+
+
+
+# (2025-01-30)
+
+### Bug Fixes
+
+- **WO-45:** added package-lock.json ([ad87873](https://github.com/anirbantegit/wontok-cicd-test/commit/ad8787324356b058cbb8f3c2485290f737829ded))
+- **WO-45:** generate_changelog.yml ([9a046f5](https://github.com/anirbantegit/wontok-cicd-test/commit/9a046f500e8eb77520daa470a3844a4f9a6e5f48))
+- **WO-45:** generate_changelog.yml ([1c1de23](https://github.com/anirbantegit/wontok-cicd-test/commit/1c1de23ee5d37525e86db63a4ab41a43cdaadaa1))
+- **WO-45:** generate_changelog.yml ([ae1754a](https://github.com/anirbantegit/wontok-cicd-test/commit/ae1754aa2ff8e3800b968bd1e71d7e2c998b844c))
+- **WO-45:** generate_changelog.yml ([d0deee5](https://github.com/anirbantegit/wontok-cicd-test/commit/d0deee54545e26c248aae2ea891767377278483d))
