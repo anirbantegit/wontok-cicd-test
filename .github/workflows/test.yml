@@ -1,6 +1,7 @@
 name: Run Tests & Lint
 
 on:
+  workflow_call:  # Allows it to be called from another workflow
   pull_request:
     types: [opened, synchronize, reopened]
 
