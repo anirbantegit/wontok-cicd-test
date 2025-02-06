@@ -99,7 +99,7 @@ jobs:
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
           # Fetch assigned reviewers
-          ASSIGNED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json requestedReviewers --jq '[.requestedReviewers[].login]')
+          ASSIGNED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviewRequests --jq '[.reviewRequests[].users[].login]')
 
           # Fetch approvals
           APPROVED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.state == "APPROVED") | .author.login]')
