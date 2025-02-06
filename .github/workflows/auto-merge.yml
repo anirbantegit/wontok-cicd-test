@@ -223,10 +223,19 @@ jobs:
         run: git push origin production
 
       - name: Delete Feature Branch After Merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ "$HEAD_BRANCH" != "production" && "$HEAD_BRANCH" != "staging" ]]; then
-            echo "🗑️ Deleting feature branch: $HEAD_BRANCH"
-            gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/$HEAD_BRANCH
+            echo "🗑️ Checking if feature branch exists: $HEAD_BRANCH"
+
+            # Check if branch exists before attempting deletion
+            if gh api repos/${{ github.repository }}/git/refs/heads/$HEAD_BRANCH >/dev/null 2>&1; then
+              echo "✅ Branch exists, deleting: $HEAD_BRANCH"
+              gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/$HEAD_BRANCH
+            else
+              echo "⚠️ Branch $HEAD_BRANCH does not exist. Skipping deletion."
+            fi
           else
             echo "❌ Not deleting protected branch: $HEAD_BRANCH"
           fi
