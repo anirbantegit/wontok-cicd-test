@@ -104,6 +104,15 @@ jobs:
           # Fetch approvals
           APPROVED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.state == "APPROVED") | .author.login]')
 
+          # Count assigned reviewers
+          REVIEWER_COUNT=$(echo "$ASSIGNED_REVIEWERS" | jq 'length')
+
+          # Fail if no reviewers are assigned
+          if [[ "$REVIEWER_COUNT" -eq 0 ]]; then
+            echo "❌ ERROR: No reviewers assigned. At least one reviewer is required before merging."
+            exit 1
+          fi
+
           # Compare assigned reviewers and approvals
           for reviewer in $(echo "$ASSIGNED_REVIEWERS" | jq -r '.[]'); do
             if ! echo "$APPROVED_REVIEWERS" | jq -r '.[]' | grep -q "^$reviewer$"; then
