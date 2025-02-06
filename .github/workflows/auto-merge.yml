@@ -2,27 +2,15 @@ name: Auto-Merge PRs
 
 on:
   pull_request:
-    types: [labeled, synchronize, reopened]
+    types: [opened, labeled, synchronize, reopened, edited]
+  pull_request_review:
+    types: [ submitted ]
 
 jobs:
-  # Run Tests Before Merging
-  test-before-merge:
+  validate-pr-title-and-description:
     runs-on: ubuntu-22.04
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Test Environment
-        uses: ./.github/actions/setup-environment/
-        with:
-          env_type: "test"
-
-      - name: Run Tests
-        uses: ./.github/actions/run-tests/
-
-  validate-pr-title:
-    runs-on: ubuntu-22.04
-    needs: test-before-merge
+    strategy:
+      fail-fast: true
     steps:
       - name: Validate PR Title
         run: |
@@ -32,11 +20,41 @@ jobs:
             exit 1
           fi
 
+      - name: Validate PR Description
+        run: |
+          PR_DESCRIPTION="${{ github.event.pull_request.body }}"
 
-  # Prepare for Merge (Squash but Don't Push Yet)
-  prepare-merge:
+          # Check if description is empty
+          if [[ -z "$PR_DESCRIPTION" ]]; then
+            echo "❌ ERROR: PR description cannot be empty!"
+            exit 1
+          fi
+
+          # Check if description follows the commit message convention (e.g., imperative tone)
+          if [[ ! "$PR_DESCRIPTION" =~ ^(Add|Fix|Improve|Update|Remove|Refactor|Implement|Optimize|Enhance|Correct|Revert|Modify|Deprecate|Restructure|Format|Document)\ .+ ]]; then
+            echo "❌ ERROR: PR description does not follow the standard commit message convention!"
+            exit 1
+          fi
+
+          # Check if description has at least 3 lines (adjust number as needed)
+          LINE_COUNT=$(echo "$PR_DESCRIPTION" | awk 'NF {count++} END {print count}')
+          if [[ "$LINE_COUNT" -lt 3 ]]; then
+            echo "❌ ERROR: PR description must contain at least 3 meaningful lines!"
+            exit 1
+          fi
+
+          echo "✅ PR description is valid."
+        shell: bash
+
+  # Check for reviewers and their approvals
+  check-if-pr-approve:
     runs-on: ubuntu-22.04
-    needs: validate-pr-title
+    strategy:
+      fail-fast: true
+    needs: validate-pr-title-and-description
+    if: success()
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -64,21 +82,82 @@ jobs:
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
-          # Fetch assigned reviewers
-          ASSIGNED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json requestedReviewers --jq '[.requestedReviewers[].login]')
+          # Fetch assigned reviewers (those explicitly assigned)
+          ASSIGNED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviewRequests --jq '[.reviewRequests[].users[].login]')
+
+          # Fetch latest reviewers (who actually reviewed the PR)
+          LATEST_REVIEWERS=$(gh pr view "$PR_NUMBER" --json latestReviews --jq '[.latestReviews[].author.login]')
+
+          # Merge both lists and remove duplicates
+          ALL_REVIEWERS=$(jq -n --argjson a "$ASSIGNED_REVIEWERS" --argjson b "$LATEST_REVIEWERS" '$a + $b | unique')
 
           # Fetch approvals
           APPROVED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.state == "APPROVED") | .author.login]')
 
-          # Compare assigned reviewers and approvals
-          for reviewer in $(echo "$ASSIGNED_REVIEWERS" | jq -r '.[]'); do
+          # Count reviewers
+          REVIEWER_COUNT=$(echo "$ALL_REVIEWERS" | jq 'length')
+
+          # Fail if no reviewers exist
+          if [[ "$REVIEWER_COUNT" -eq 0 ]]; then
+            echo "❌ ERROR: No reviews found. At least one reviewer approval is required before merging."
+            exit 1
+          fi
+
+          # Ensure all reviewers have approved
+          for reviewer in $(echo "$ALL_REVIEWERS" | jq -r '.[]'); do
             if ! echo "$APPROVED_REVIEWERS" | jq -r '.[]' | grep -q "^$reviewer$"; then
               echo "❌ PR #$PR_NUMBER is NOT fully approved. Missing approval from: $reviewer"
               exit 1
             fi
           done
 
-          echo "✅ All assigned reviewers have approved. Proceeding with squash merge..."
+          echo "✅ All assigned and reviewed users have approved. Proceeding with squash merge..."
+
+
+
+  # Run Tests Before Merging
+  test-before-merge:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
+    needs: check-if-pr-approve
+    if: success()
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Test Environment
+        uses: ./.github/actions/setup-environment/
+        with:
+          env_type: "test"
+
+      - name: Run Tests
+        uses: ./.github/actions/run-tests/
+  # Prepare for Merge (Squash but Don't Push Yet)
+  prepare-merge:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
+    needs: test-before-merge
+    if: success()
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install GitHub CLI
+        run: sudo apt update && sudo apt install -y gh
+
+      - name: Authenticate with GitHub CLI
+        run: gh auth status
+
+      - name: Fetch and Checkout PR Branch
+        run: |
+          git fetch origin $HEAD_BRANCH
+          git checkout $HEAD_BRANCH
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
 
       - name: Set Merge Message
         run: |
@@ -87,7 +166,13 @@ jobs:
           else
             COMMIT_MESSAGE="${{ github.event.pull_request.title }} - ${{ github.event.pull_request.body }}"
           fi
-          echo "COMMIT_MESSAGE=$COMMIT_MESSAGE" >> $GITHUB_ENV
+
+          # Write the multi-line commit message safely to GITHUB_ENV
+          {
+            echo "COMMIT_MESSAGE<<EOF"
+            echo "$COMMIT_MESSAGE"
+            echo "EOF"
+          } >> "$GITHUB_ENV"
 
       - name: Squash Merge PR
         run: |
@@ -101,7 +186,10 @@ jobs:
   # Run Tests on Merged Code Before Pushing
   test-after-merge:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
     needs: prepare-merge
+    if: success()
     steps:
       - name: Checkout Production Branch
         uses: actions/checkout@v4
@@ -119,7 +207,12 @@ jobs:
   # Push to Production If All Tests Pass
   push-to-production:
     runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
     needs: test-after-merge
+    if: success()
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout Production Branch
         uses: actions/checkout@v4
@@ -130,10 +223,19 @@ jobs:
         run: git push origin production
 
       - name: Delete Feature Branch After Merge
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
           if [[ "$HEAD_BRANCH" != "production" && "$HEAD_BRANCH" != "staging" ]]; then
-            echo "🗑️ Deleting feature branch: $HEAD_BRANCH"
-            gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/$HEAD_BRANCH
+            echo "🗑️ Checking if feature branch exists: $HEAD_BRANCH"
+
+            # Check if branch exists before attempting deletion
+            if gh api repos/${{ github.repository }}/git/refs/heads/$HEAD_BRANCH >/dev/null 2>&1; then
+              echo "✅ Branch exists, deleting: $HEAD_BRANCH"
+              gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/$HEAD_BRANCH
+            else
+              echo "⚠️ Branch $HEAD_BRANCH does not exist. Skipping deletion."
+            fi
           else
             echo "❌ Not deleting protected branch: $HEAD_BRANCH"
           fi
