@@ -185,16 +185,6 @@ jobs:
 
           echo "✅ All required status checks passed. Proceeding with squash merge dry run."
 
-      - name: Simulate Squash Merge (Dry Run)
-        run: |
-          echo "🔍 Simulating squash merge for PR #$PR_NUMBER..."
-          gh pr merge "$PR_NUMBER" --squash --subject "DRY RUN: $PR_NUMBER" --dry-run || {
-            echo "❌ ERROR: Dry run failed. Check the PR status and conflicts."
-            exit 1
-          }
-
-          echo "✅ Dry run successful! Ready for real merge."
-
       - name: Set Merge Message
         run: |
           if [[ "$COMMIT_COUNT" -eq 1 ]]; then
