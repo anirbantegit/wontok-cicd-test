@@ -167,7 +167,7 @@ jobs:
 
       - name: Perform Dry Run (Check Mergeability)
         run: |
-          MERGE_STATUS=$(gh pr view "$PR_NUMBER" --json mergeStateStatus --jq -r '.mergeStateStatus')
+          MERGE_STATUS=$(gh pr view "$PR_NUMBER" --json mergeStateStatus --jq '.mergeStateStatus' | tr -d '"')
 
           echo "🔍 Mergeability Status: $MERGE_STATUS"
 
