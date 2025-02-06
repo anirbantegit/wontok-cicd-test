@@ -5,7 +5,7 @@ on:
     types: [labeled, synchronize, reopened]
 
 jobs:
-  validate-pr-title:
+  validate-pr-title-and-description:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: true
@@ -17,12 +17,38 @@ jobs:
             echo "❌ ERROR: PR title does not follow the required format!"
             exit 1
           fi
+      - name: Validate PR Description
+        run: |
+          PR_DESCRIPTION="${{ github.event.pull_request.body }}"
+
+          # Check if description is empty
+          if [[ -z "$PR_DESCRIPTION" ]]; then
+            echo "❌ ERROR: PR description cannot be empty!"
+            exit 1
+          fi
+
+          # Check if description follows the commit message convention (e.g., imperative tone)
+          if [[ ! "$PR_DESCRIPTION" =~ ^(Add|Fix|Improve|Update|Remove|Refactor|Implement|Optimize|Enhance|Correct|Revert|Modify|Deprecate|Restructure|Format|Document)\ .+ ]]; then
+            echo "❌ ERROR: PR description does not follow the standard commit message convention!"
+            exit 1
+          fi
+
+          # Check if description has at least 3 lines (adjust number as needed)
+          LINE_COUNT=$(echo "$PR_DESCRIPTION" | awk 'NF {count++} END {print count}')
+          if [[ "$LINE_COUNT" -lt 3 ]]; then
+            echo "❌ ERROR: PR description must contain at least 3 meaningful lines!"
+            exit 1
+          fi
+
+          echo "✅ PR description is valid."
+        shell: bash
+
   # Run Tests Before Merging
   test-before-merge:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: true
-    needs: validate-pr-title
+    needs: validate-pr-title-and-description
     if: success()
     steps:
       - name: Checkout Code
