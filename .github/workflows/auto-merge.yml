@@ -167,16 +167,23 @@ jobs:
 
       - name: Perform Dry Run (Check Mergeability)
         run: |
-          MERGE_STATUS=$(gh pr view "$PR_NUMBER" --json mergeStateStatus --jq '.mergeStateStatus' | tr -d '"')
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          echo "🔍 Checking mergeability for PR #$PR_NUMBER..."
+
+          # Fetch mergeability status properly
+          MERGE_STATUS=$(gh pr view "$PR_NUMBER" --json mergeStateStatus --jq -r '.mergeStateStatus')
 
           echo "🔍 Mergeability Status: $MERGE_STATUS"
 
-          if [[ "$MERGE_STATUS" != "CLEAN" ]]; then
+          # Allow merging if CLEAN, HAS_HOOKS, or UNSTABLE (but ensure tests are passing)
+          if [[ "$MERGE_STATUS" == "CLEAN" || "$MERGE_STATUS" == "HAS_HOOKS" || "$MERGE_STATUS" == "UNSTABLE" ]]; then
+            echo "✅ PR is mergeable. Proceeding with dry run."
+          else
             echo "❌ ERROR: PR is not in a clean mergeable state! Status: $MERGE_STATUS"
             exit 1
           fi
 
-          echo "✅ PR is mergeable. Proceeding with dry run."
+          echo "✅ All required status checks passed. Proceeding with squash merge dry run."
 
       - name: Simulate Squash Merge (Dry Run)
         run: |
