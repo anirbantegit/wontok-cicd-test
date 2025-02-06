@@ -214,6 +214,14 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Fetch PR Details
+        run: |
+          HEAD_BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+
+          echo "Head Branch: $HEAD_BRANCH"
+
+          echo "HEAD_BRANCH=$HEAD_BRANCH" >> $GITHUB_ENV
+
       - name: Checkout Production Branch
         uses: actions/checkout@v4
         with:
