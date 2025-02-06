@@ -211,6 +211,8 @@ jobs:
       fail-fast: true
     needs: test-after-merge
     if: success()
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
       - name: Checkout Production Branch
         uses: actions/checkout@v4
