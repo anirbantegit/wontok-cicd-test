@@ -2,7 +2,7 @@ name: Auto-Merge PRs
 
 on:
   pull_request:
-    types: [labeled, synchronize, reopened, edited]
+    types: [opened, labeled, synchronize, reopened, edited]
   pull_request_review:
     types: [ submitted ]
 
@@ -46,30 +46,12 @@ jobs:
           echo "✅ PR description is valid."
         shell: bash
 
-  # Run Tests Before Merging
-  test-before-merge:
+  # Check for reviewers and their approvals
+  check-if-pr-approve:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: true
     needs: validate-pr-title-and-description
-    if: success()
-    steps:
-      - name: Checkout Code
-        uses: actions/checkout@v4
-
-      - name: Setup Test Environment
-        uses: ./.github/actions/setup-environment/
-        with:
-          env_type: "test"
-
-      - name: Run Tests
-        uses: ./.github/actions/run-tests/
-  # Prepare for Merge (Squash but Don't Push Yet)
-  prepare-merge:
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: true
-    needs: test-before-merge
     if: success()
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -131,6 +113,52 @@ jobs:
 
           echo "✅ All assigned and reviewed users have approved. Proceeding with squash merge..."
 
+
+
+  # Run Tests Before Merging
+  test-before-merge:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
+    needs: check-if-pr-approve
+    if: success()
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Setup Test Environment
+        uses: ./.github/actions/setup-environment/
+        with:
+          env_type: "test"
+
+      - name: Run Tests
+        uses: ./.github/actions/run-tests/
+  # Prepare for Merge (Squash but Don't Push Yet)
+  prepare-merge:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
+    needs: test-before-merge
+    if: success()
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Install GitHub CLI
+        run: sudo apt update && sudo apt install -y gh
+
+      - name: Authenticate with GitHub CLI
+        run: gh auth status
+
+      - name: Fetch and Checkout PR Branch
+        run: |
+          git fetch origin $HEAD_BRANCH
+          git checkout $HEAD_BRANCH
+        env:
+          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+
       - name: Set Merge Message
         run: |
           if [[ "$COMMIT_COUNT" -eq 1 ]]; then
@@ -175,6 +203,7 @@ jobs:
 
       - name: Run Tests on Merged Code
         uses: ./.github/actions/run-tests/
+
   # Push to Production If All Tests Pass
   push-to-production:
     runs-on: ubuntu-22.04
