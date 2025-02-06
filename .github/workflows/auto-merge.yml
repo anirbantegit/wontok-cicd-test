@@ -100,30 +100,36 @@ jobs:
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
 
-          # Fetch assigned reviewers
+          # Fetch assigned reviewers (those explicitly assigned)
           ASSIGNED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviewRequests --jq '[.reviewRequests[].users[].login]')
+
+          # Fetch latest reviewers (who actually reviewed the PR)
+          LATEST_REVIEWERS=$(gh pr view "$PR_NUMBER" --json latestReviews --jq '[.latestReviews[].author.login]')
+
+          # Merge both lists and remove duplicates
+          ALL_REVIEWERS=$(jq -n --argjson a "$ASSIGNED_REVIEWERS" --argjson b "$LATEST_REVIEWERS" '$a + $b | unique')
 
           # Fetch approvals
           APPROVED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.state == "APPROVED") | .author.login]')
 
-          # Count assigned reviewers
-          REVIEWER_COUNT=$(echo "$ASSIGNED_REVIEWERS" | jq 'length')
+          # Count reviewers
+          REVIEWER_COUNT=$(echo "$ALL_REVIEWERS" | jq 'length')
 
-          # Fail if no reviewers are assigned
+          # Fail if no reviewers exist
           if [[ "$REVIEWER_COUNT" -eq 0 ]]; then
-            echo "❌ ERROR: No reviewers assigned. At least one reviewer is required before merging."
+            echo "❌ ERROR: No reviews found. At least one reviewer approval is required before merging."
             exit 1
           fi
 
-          # Compare assigned reviewers and approvals
-          for reviewer in $(echo "$ASSIGNED_REVIEWERS" | jq -r '.[]'); do
+          # Ensure all reviewers have approved
+          for reviewer in $(echo "$ALL_REVIEWERS" | jq -r '.[]'); do
             if ! echo "$APPROVED_REVIEWERS" | jq -r '.[]' | grep -q "^$reviewer$"; then
               echo "❌ PR #$PR_NUMBER is NOT fully approved. Missing approval from: $reviewer"
               exit 1
             fi
           done
 
-          echo "✅ All assigned reviewers have approved. Proceeding with squash merge..."
+          echo "✅ All assigned and reviewed users have approved. Proceeding with squash merge..."
 
       - name: Set Merge Message
         run: |
