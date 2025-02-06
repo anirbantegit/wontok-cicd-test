@@ -42,7 +42,7 @@ jobs:
           fi
 
           echo "✅ PR description is valid."
-          shell: bash
+        shell: bash
 
   # Run Tests Before Merging
   test-before-merge:
