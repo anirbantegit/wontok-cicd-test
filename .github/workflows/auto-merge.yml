@@ -67,7 +67,7 @@ jobs:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: true
-    needs: validate-pr-title
+    needs: test-before-merge
     if: success()
     steps:
       - name: Checkout Code
