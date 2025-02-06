@@ -5,11 +5,25 @@ on:
     types: [labeled, synchronize, reopened]
 
 jobs:
+  validate-pr-title:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
+    steps:
+      - name: Validate PR Title
+        run: |
+          PR_TITLE="${{ github.event.pull_request.title }}"
+          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|perf|test|build|chore)\(WO-[0-9]+\):\ .+$ ]]; then
+            echo "❌ ERROR: PR title does not follow the required format!"
+            exit 1
+          fi
   # Run Tests Before Merging
   test-before-merge:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: true
+    needs: validate-pr-title
+    if: success()
     steps:
       - name: Checkout Code
         uses: actions/checkout@v4
@@ -21,21 +35,6 @@ jobs:
 
       - name: Run Tests
         uses: ./.github/actions/run-tests/
-
-  validate-pr-title:
-    runs-on: ubuntu-22.04
-    needs: test-before-merge
-    if: success()
-    steps:
-      - name: Validate PR Title
-        run: |
-          PR_TITLE="${{ github.event.pull_request.title }}"
-          if [[ ! "$PR_TITLE" =~ ^(feat|fix|docs|style|refactor|perf|test|build|chore)\(WO-[0-9]+\):\ .+$ ]]; then
-            echo "❌ ERROR: PR title does not follow the required format!"
-            exit 1
-          fi
-
-
   # Prepare for Merge (Squash but Don't Push Yet)
   prepare-merge:
     runs-on: ubuntu-22.04
@@ -124,7 +123,6 @@ jobs:
 
       - name: Run Tests on Merged Code
         uses: ./.github/actions/run-tests/
-
   # Push to Production If All Tests Pass
   push-to-production:
     runs-on: ubuntu-22.04
