@@ -152,12 +152,41 @@ jobs:
       - name: Authenticate with GitHub CLI
         run: gh auth status
 
-      - name: Fetch and Checkout PR Branch
+      - name: Fetch PR Details
         run: |
-          git fetch origin $HEAD_BRANCH
-          git checkout $HEAD_BRANCH
-        env:
-          HEAD_BRANCH: ${{ github.event.pull_request.head.ref }}
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          BASE_BRANCH=$(gh pr view "$PR_NUMBER" --json baseRefName --jq '.baseRefName')
+          HEAD_BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
+
+          echo "Base Branch: $BASE_BRANCH"
+          echo "Head Branch: $HEAD_BRANCH"
+
+          echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
+          echo "BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
+          echo "HEAD_BRANCH=$HEAD_BRANCH" >> $GITHUB_ENV
+
+      - name: Perform Dry Run (Check Mergeability)
+        run: |
+          MERGE_STATUS=$(gh pr view "$PR_NUMBER" --json mergeStateStatus --jq -r '.mergeStateStatus')
+
+          echo "🔍 Mergeability Status: $MERGE_STATUS"
+
+          if [[ "$MERGE_STATUS" != "CLEAN" ]]; then
+            echo "❌ ERROR: PR is not in a clean mergeable state! Status: $MERGE_STATUS"
+            exit 1
+          fi
+
+          echo "✅ PR is mergeable. Proceeding with dry run."
+
+      - name: Simulate Squash Merge (Dry Run)
+        run: |
+          echo "🔍 Simulating squash merge for PR #$PR_NUMBER..."
+          gh pr merge "$PR_NUMBER" --squash --subject "DRY RUN: $PR_NUMBER" --dry-run || {
+            echo "❌ ERROR: Dry run failed. Check the PR status and conflicts."
+            exit 1
+          }
+
+          echo "✅ Dry run successful! Ready for real merge."
 
       - name: Set Merge Message
         run: |
@@ -174,20 +203,7 @@ jobs:
             echo "EOF"
           } >> "$GITHUB_ENV"
 
-      - name: Debug Token Permissions
-        run: |
-          echo "Checking token permissions..."
-          gh auth status || echo "GitHub CLI is not authenticated"
-          gh api user || echo "GitHub API request failed"
-        env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Squash Merge PR
-        run: |
-          gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
-
-
-      - name: Squash Merge PR (But Don't Push Yet)
+      - name: Squash Merge PR (Real Merge)
         run: |
           gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
 
@@ -211,39 +227,3 @@ jobs:
 
       - name: Run Tests on Merged Code
         uses: ./.github/actions/run-tests/
-
-  # Push to Production If All Tests Pass
-  push-to-production:
-    runs-on: ubuntu-22.04
-    strategy:
-      fail-fast: true
-    needs: test-after-merge
-    if: success()
-    env:
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - name: Fetch PR Details
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          HEAD_BRANCH=$(gh pr view "$PR_NUMBER" --json headRefName --jq '.headRefName')
-
-          echo "Head Branch: $HEAD_BRANCH"
-
-          echo "HEAD_BRANCH=$HEAD_BRANCH" >> $GITHUB_ENV
-
-      - name: Checkout Production Branch
-        uses: actions/checkout@v4
-        with:
-          ref: production
-
-      - name: Push Merged Code to Production
-        run: git push origin production
-
-      - name: Delete Feature Branch After Merge
-        run: |
-          if [[ "$HEAD_BRANCH" != "production" && "$HEAD_BRANCH" != "staging" ]]; then
-            echo "🗑️ Deleting feature branch: $HEAD_BRANCH"
-            gh api -X DELETE repos/${{ github.repository }}/git/refs/heads/$HEAD_BRANCH
-          else
-            echo "❌ Not deleting protected branch: $HEAD_BRANCH"
-          fi
