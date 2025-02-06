@@ -17,6 +17,7 @@ jobs:
             echo "❌ ERROR: PR title does not follow the required format!"
             exit 1
           fi
+
       - name: Validate PR Description
         run: |
           PR_DESCRIPTION="${{ github.event.pull_request.body }}"
@@ -41,7 +42,7 @@ jobs:
           fi
 
           echo "✅ PR description is valid."
-        shell: bash
+          shell: bash
 
   # Run Tests Before Merging
   test-before-merge:
