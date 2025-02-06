@@ -46,8 +46,6 @@ jobs:
 
       - name: Authenticate with GitHub CLI
         run: gh auth status
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Fetch PR Details
         run: |
@@ -61,21 +59,26 @@ jobs:
           echo "PR_NUMBER=$PR_NUMBER" >> $GITHUB_ENV
           echo "BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
           echo "HEAD_BRANCH=$HEAD_BRANCH" >> $GITHUB_ENV
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Check if PR is Approved
         run: |
-          APPROVAL_COUNT=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[].state | select(. == "APPROVED")] | length')
+          PR_NUMBER="${{ github.event.pull_request.number }}"
 
-          if [[ "$APPROVAL_COUNT" -ge 1 ]]; then
-            echo "✅ PR #$PR_NUMBER is approved, proceeding with squash merge..."
-          else
-            echo "❌ PR #$PR_NUMBER is not approved, skipping merge."
-            exit 0
-          fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Fetch assigned reviewers
+          ASSIGNED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json requestedReviewers --jq '[.requestedReviewers[].login]')
+
+          # Fetch approvals
+          APPROVED_REVIEWERS=$(gh pr view "$PR_NUMBER" --json reviews --jq '[.reviews[] | select(.state == "APPROVED") | .author.login]')
+
+          # Compare assigned reviewers and approvals
+          for reviewer in $(echo "$ASSIGNED_REVIEWERS" | jq -r '.[]'); do
+            if ! echo "$APPROVED_REVIEWERS" | jq -r '.[]' | grep -q "^$reviewer$"; then
+              echo "❌ PR #$PR_NUMBER is NOT fully approved. Missing approval from: $reviewer"
+              exit 1
+            fi
+          done
+
+          echo "✅ All assigned reviewers have approved. Proceeding with squash merge..."
 
       - name: Set Merge Message
         run: |
@@ -89,15 +92,11 @@ jobs:
       - name: Squash Merge PR
         run: |
           gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
 
       - name: Squash Merge PR (But Don't Push Yet)
         run: |
           gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
   # Run Tests on Merged Code Before Pushing
   test-after-merge:
@@ -129,8 +128,6 @@ jobs:
 
       - name: Push Merged Code to Production
         run: git push origin production
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
 
       - name: Delete Feature Branch After Merge
         run: |
@@ -140,5 +137,3 @@ jobs:
           else
             echo "❌ Not deleting protected branch: $HEAD_BRANCH"
           fi
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
