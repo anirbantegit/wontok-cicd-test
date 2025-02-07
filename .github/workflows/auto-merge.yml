@@ -30,7 +30,7 @@ jobs:
             exit 1
           fi
 
-          # Check if description follows the commit message convention (e.g., imperative tone)
+          # Check if description follows the commit message convention
           if [[ ! "$PR_DESCRIPTION" =~ ^(Add|Fix|Improve|Update|Remove|Refactor|Implement|Optimize|Enhance|Correct|Revert|Modify|Deprecate|Restructure|Format|Document)\ .+ ]]; then
             echo "❌ ERROR: PR description does not follow the standard commit message convention!"
             exit 1
@@ -46,12 +46,41 @@ jobs:
           echo "✅ PR description is valid."
         shell: bash
 
-  # Check for reviewers and their approvals
-  check-if-pr-approve:
+  check-mergeability:
     runs-on: ubuntu-22.04
     strategy:
       fail-fast: true
     needs: validate-pr-title-and-description
+    if: success()
+    env:
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - name: Perform Dry Run (Check Mergeability)
+        run: |
+          PR_NUMBER="${{ github.event.pull_request.number }}"
+          echo "🔍 Checking mergeability for PR #$PR_NUMBER..."
+
+          # Fetch mergeability status properly
+          MERGE_STATUS=$(gh pr view "$PR_NUMBER" --json mergeStateStatus --jq '.mergeStateStatus' | tr -d '"')
+
+          echo "🔍 Mergeability Status: $MERGE_STATUS"
+
+          # Allow merging if CLEAN, HAS_HOOKS, or UNSTABLE (but ensure tests are passing)
+          if [[ "$MERGE_STATUS" == "CLEAN" || "$MERGE_STATUS" == "HAS_HOOKS" || "$MERGE_STATUS" == "UNSTABLE" ]]; then
+            echo "✅ PR is mergeable. Proceeding with dry run."
+          else
+            echo "❌ ERROR: PR is not in a clean mergeable state! Status: $MERGE_STATUS"
+            exit 1
+          fi
+
+          echo "✅ All required status checks passed. Proceeding with squash merge dry run."
+
+
+  check-if-pr-approve:
+    runs-on: ubuntu-22.04
+    strategy:
+      fail-fast: true
+    needs: check-mergeability
     if: success()
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -115,7 +144,9 @@ jobs:
 
 
 
-  # Run Tests Before Merging
+
+
+
   test-before-merge:
     runs-on: ubuntu-22.04
     strategy:
@@ -133,7 +164,7 @@ jobs:
 
       - name: Run Tests
         uses: ./.github/actions/run-tests/
-  # Prepare for Merge (Squash but Don't Push Yet)
+
   prepare-merge:
     runs-on: ubuntu-22.04
     strategy:
@@ -165,26 +196,6 @@ jobs:
           echo "BASE_BRANCH=$BASE_BRANCH" >> $GITHUB_ENV
           echo "HEAD_BRANCH=$HEAD_BRANCH" >> $GITHUB_ENV
 
-      - name: Perform Dry Run (Check Mergeability)
-        run: |
-          PR_NUMBER="${{ github.event.pull_request.number }}"
-          echo "🔍 Checking mergeability for PR #$PR_NUMBER..."
-
-          # Fetch mergeability status properly
-          MERGE_STATUS=$(gh pr view "$PR_NUMBER" --json mergeStateStatus --jq '.mergeStateStatus' | tr -d '"')
-
-          echo "🔍 Mergeability Status: $MERGE_STATUS"
-
-          # Allow merging if CLEAN, HAS_HOOKS, or UNSTABLE (but ensure tests are passing)
-          if [[ "$MERGE_STATUS" == "CLEAN" || "$MERGE_STATUS" == "HAS_HOOKS" || "$MERGE_STATUS" == "UNSTABLE" ]]; then
-            echo "✅ PR is mergeable. Proceeding with dry run."
-          else
-            echo "❌ ERROR: PR is not in a clean mergeable state! Status: $MERGE_STATUS"
-            exit 1
-          fi
-
-          echo "✅ All required status checks passed. Proceeding with squash merge dry run."
-
       - name: Set Merge Message
         run: |
           if [[ "$COMMIT_COUNT" -eq 1 ]]; then
@@ -204,7 +215,7 @@ jobs:
         run: |
           gh pr merge "$PR_NUMBER" --squash --subject "$COMMIT_MESSAGE"
 
-  # Run Tests on Merged Code Before Pushing
+
   test-after-merge:
     runs-on: ubuntu-22.04
     strategy:
