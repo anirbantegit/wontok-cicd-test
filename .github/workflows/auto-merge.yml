@@ -55,6 +55,9 @@ jobs:
     env:
       GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
     steps:
+      - name: Checkout Code  # 🛠️ Add this to ensure we are inside a Git repo
+        uses: actions/checkout@v4
+
       - name: Perform Dry Run (Check Mergeability)
         run: |
           PR_NUMBER="${{ github.event.pull_request.number }}"
